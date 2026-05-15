@@ -1,0 +1,72 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment and local config
+.env
+.env.*
+*.local
+.codex/
+.agents/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Datasets and generated data
+dataset/
+processed_dataset/
+final_dataset/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Training outputs and model artifacts
+results/
+*.keras
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.ckpt
+checkpoints/
+logs/
+runs/
+wandb/
+
+# Python packaging/build outputs
+build/
+dist/
+*.egg-info/
+
+# Generated manifests
+train.txt
+valid.txt
+test.txt
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Keep coursework report files trackable.
+!reports/
+!reports/*.pdf
