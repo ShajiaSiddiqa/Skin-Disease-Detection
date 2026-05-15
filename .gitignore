@@ -41,6 +41,13 @@ final_dataset/
 *.tar.gz
 *.7z
 
+ data/
+datasets/
+outputs/
+*.csv
+*.npy
+*.pkl
+
 # Training outputs and model artifacts
 results/
 *.keras
@@ -70,3 +77,8 @@ test.txt
 # Keep coursework report files trackable.
 !reports/
 !reports/*.pdf
+
+.main.py
+
+pys/
+scripts/
