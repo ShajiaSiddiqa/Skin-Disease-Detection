@@ -17,22 +17,16 @@ This project is for coursework and experimentation only. It is not a medical dia
 ├── train_cnn_models.py      # Main PyTorch training/evaluation pipeline
 ├── model_a.py               # Improved VGG-style PyTorch CNN architecture
 ├── model_b.py               # Deeper plain PyTorch CNN architecture
-├── main.py                  # Image resize/preprocessing helper
-├── main2.py                 # Dataset split helper
 ├── pipeline.py              # Legacy TXT-based dataset loader
 ├── textcreation.py          # Generates train/valid/test TXT manifests
-├── scripts/
-│   └── generate_project_report.py
 ├── reports/
 │   └── skin_disease_detection_report.pdf
 ├── requirements.txt         # Python dependencies
 ├── dataset/                 # Raw class images, ignored by Git
 ├── processed_dataset/       # Resized/preprocessed images, ignored by Git
 ├── final_dataset/           # Train/valid/test image folders, ignored by Git
-├── results/                 # Training outputs, ignored by Git
-├── train.txt                # Optional legacy manifest
-├── valid.txt                # Optional legacy manifest
-└── test.txt                 # Optional legacy manifest
+└── results/                 # Training outputs, ignored by Git
+
 ```
 
 ## Dataset Layout
