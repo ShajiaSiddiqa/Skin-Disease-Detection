@@ -692,7 +692,7 @@ def write_run_summary(output_dir, args, split_counts, all_metrics, mean, std):
                 "loss": f"{args.loss} with label_smoothing=0.05 and optional inverse-frequency class weights",
             },
             "custom_cnn_b": {
-                "architecture": "Deeper plain Conv2d CNN stages with BatchNorm, MaxPool2d, Dropout2d, and average/max global pooling",
+                "architecture": "Deeper plain Conv2d CNN stages with BatchNorm, MaxPool2d, and average/max global pooling",
                 "activation": "SiLU hidden layers, raw logits output",
                 "optimizer": f"AdamW learning_rate={args.learning_rate} weight_decay={args.weight_decay}",
                 "loss": f"{args.loss} with label_smoothing=0.05 and optional inverse-frequency class weights",

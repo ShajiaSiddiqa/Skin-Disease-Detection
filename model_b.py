@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-def conv_bn_act(in_channels, out_channels, kernel_size=3, stride=1, dropout=0.0):
+def conv_bn_act(in_channels, out_channels, kernel_size=3, stride=1):
     padding = kernel_size // 2
     layers = [
         nn.Conv2d(
@@ -16,19 +16,16 @@ def conv_bn_act(in_channels, out_channels, kernel_size=3, stride=1, dropout=0.0)
         nn.BatchNorm2d(out_channels),
         nn.SiLU(inplace=True),
     ]
-    if dropout:
-        layers.append(nn.Dropout2d(dropout))
     return nn.Sequential(*layers)
 
 
 class PlainCNNStage(nn.Module):
-    def __init__(self, in_channels, out_channels, dropout):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
         self.stage = nn.Sequential(
             conv_bn_act(in_channels, out_channels),
             conv_bn_act(out_channels, out_channels),
             nn.MaxPool2d(2),
-            nn.Dropout2d(dropout),
         )
 
     def forward(self, x):
@@ -44,11 +41,11 @@ class CustomCNNB(nn.Module):
 
         self.features = nn.Sequential(
             conv_bn_act(3, 32),
-            PlainCNNStage(32, 48, dropout=0.04),
-            PlainCNNStage(48, 72, dropout=0.06),
-            PlainCNNStage(72, 96, dropout=0.08),
-            PlainCNNStage(96, 128, dropout=0.10),
-            conv_bn_act(128, 160, dropout=0.12),
+            PlainCNNStage(32, 48),
+            PlainCNNStage(48, 72),
+            PlainCNNStage(72, 96),
+            PlainCNNStage(96, 128),
+            conv_bn_act(128, 160),
         )
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.max_pool = nn.AdaptiveMaxPool2d((1, 1))
@@ -57,11 +54,9 @@ class CustomCNNB(nn.Module):
             nn.Linear(320, 128),
             nn.BatchNorm1d(128),
             nn.SiLU(inplace=True),
-            nn.Dropout(0.28),
             nn.Linear(128, 64),
             nn.BatchNorm1d(64),
             nn.SiLU(inplace=True),
-            nn.Dropout(0.18),
             nn.Linear(64, num_classes),
         )
 

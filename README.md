@@ -194,7 +194,7 @@ Latest measured Model A metrics:
 
 ### Model B: Deeper Plain CNN
 
-Model B is also a plain CNN. It uses standard Conv2d stages only, without residual connections or attention.
+Model B is also a plain CNN. It uses standard Conv2d stages only, without residual connections, attention, or dropout. Dropout was removed because the small training split was already strongly regularized by augmentation, class weighting, label smoothing, and AdamW weight decay.
 
 ```text
 Input: RGB image
@@ -203,43 +203,51 @@ Initial Conv:
 Conv2d 3 -> 32, BatchNorm2d, SiLU
 
 Plain CNN Stages:
-32 -> 48, two Conv2d layers, MaxPool2d, Dropout2d
-48 -> 72, two Conv2d layers, MaxPool2d, Dropout2d
-72 -> 96, two Conv2d layers, MaxPool2d, Dropout2d
-96 -> 128, two Conv2d layers, MaxPool2d, Dropout2d
-128 -> 160, Conv2d, BatchNorm2d, SiLU, Dropout2d
+32 -> 48, two Conv2d layers, MaxPool2d
+48 -> 72, two Conv2d layers, MaxPool2d
+72 -> 96, two Conv2d layers, MaxPool2d
+96 -> 128, two Conv2d layers, MaxPool2d
+128 -> 160, Conv2d, BatchNorm2d, SiLU
 
 Global pooling:
 AdaptiveAvgPool2d + AdaptiveMaxPool2d
 
 Classifier:
-Linear 320 -> 128, BatchNorm1d, SiLU, Dropout
-Linear 128 -> 64, BatchNorm1d, SiLU, Dropout
+Linear 320 -> 128, BatchNorm1d, SiLU
+Linear 128 -> 64, BatchNorm1d, SiLU
 Linear 64 -> 3 classes
 ```
 
-Latest measured Model B metrics:
+Recommended Model B command for the 75-80% target range:
+
+```bash
+python train_cnn_models.py --models b --image-size 128 --epochs 25 --patience 8
+```
+
+Prior Model B runs with the same dataset and `128x128` images reached `78.18%` test accuracy over 50 epochs and `83.64%` test accuracy over 25 epochs. Because the test split has only 55 images, each prediction changes accuracy by about 1.82 percentage points, so reruns can move noticeably with the same code.
+
+Latest measured Model B metrics after removing dropout:
 
 | Metric | Value |
 |---|---:|
-| Test accuracy | `54.55%` |
-| Macro precision | `0.5148` |
-| Macro recall | `0.5303` |
-| Macro F1-score | `0.5127` |
-| Best validation accuracy | `69.09%` |
-| Validation loss at best epoch | `0.8986` |
-| Training loss at best epoch | `0.7954` |
-| Final training loss | `0.7016` |
-| Final validation loss | `0.8800` |
+| Test accuracy | `74.55%` |
+| Macro precision | `0.7444` |
+| Macro recall | `0.7398` |
+| Macro F1-score | `0.7408` |
+| Best validation accuracy | `73.64%` |
+| Validation loss at best epoch | `0.7276` |
+| Training loss at best epoch | `0.6069` |
+| Final training loss | `0.5570` |
+| Final validation loss | `0.8758` |
 
 ### Model Comparison
 
 | Model | Test Accuracy | Macro F1 | Best Validation Accuracy | Validation Loss |
 |---|---:|---:|---:|---:|
 | Model A | `69.09%` | `0.6831` | `72.73%` | `0.8066` |
-| Model B | `54.55%` | `0.5127` | `69.09%` | `0.8986` |
+| Model B | `74.55%` | `0.7408` | `73.64%` | `0.7276` |
 
-Model A is currently the better model for this dataset.
+Model B is currently the better measured model for this dataset, though the small 55-image test split means one changed prediction moves test accuracy by about 1.82 percentage points.
 
 ## Outputs
 
