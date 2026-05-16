@@ -49,6 +49,7 @@ outputs/
 *.pkl
 
 # Training outputs and model artifacts
+frontend/
 results/
 *.keras
 *.pt
