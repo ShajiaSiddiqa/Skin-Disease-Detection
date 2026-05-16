@@ -5,6 +5,8 @@ import random
 from datetime import datetime
 from pathlib import Path
 
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -13,7 +15,6 @@ import torch.optim as optim
 from PIL import Image
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 from torch.utils.data import DataLoader, TensorDataset
-
 
 CLASS_NAMES = ["chickenpox", "eczema", "ringworm"]
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}

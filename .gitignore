@@ -56,6 +56,8 @@ results/
 *.h5
 *.hdf5
 *.ckpt
+simple_linear_model.joblib
+simple_linear_metrics.json
 checkpoints/
 logs/
 runs/

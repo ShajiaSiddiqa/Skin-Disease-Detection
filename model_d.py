@@ -3,11 +3,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 from datetime import datetime
 from pathlib import Path
 
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from PIL import Image
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -57,9 +61,9 @@ class SkinDiseaseDataset(Dataset):
         with Image.open(image_path) as image:
             image = image.convert("RGB")
             image = image.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
-            image_tensor = torch.ByteTensor(torch.ByteStorage.from_buffer(image.tobytes()))
-            image_tensor = image_tensor.reshape(self.img_size, self.img_size, 3)
-            image_tensor = image_tensor.permute(2, 0, 1).float() / 255.0
+            image_array = np.asarray(image, dtype=np.float32) / 255.0
+            image_tensor = torch.from_numpy(np.ascontiguousarray(image_array))
+            image_tensor = image_tensor.permute(2, 0, 1).float()
         return image_tensor, torch.tensor(label, dtype=torch.long)
 
 

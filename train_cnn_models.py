@@ -10,16 +10,20 @@ from pathlib import Path
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import matplotlib.pyplot as plt
+import joblib
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image, ImageEnhance
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, log_loss, precision_recall_fscore_support
 from torch.utils.data import DataLoader, Dataset
 
 from model_a import build_model_a
 from model_b import build_model_b
+from model_c import SimpleCNN
+from model_d import ANNClassifier
 
 
 CLASS_NAMES = ["chickenpox", "eczema", "ringworm"]
@@ -28,7 +32,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Train and compare two custom PyTorch CNN models for skin disease detection."
+        description="Train and compare skin disease detection models A-E."
     )
     parser.add_argument("--data-dir", default="final_dataset", help="Dataset root folder.")
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs per model.")
@@ -58,9 +62,15 @@ def parse_args():
     )
     parser.add_argument(
         "--models",
-        choices=["a", "b", "both"],
+        choices=["a", "b", "c", "d", "e", "both", "all"],
         default="both",
-        help="Choose which model to train.",
+        help="Choose which model to train. Use 'both' for A+B or 'all' for A-E.",
+    )
+    parser.add_argument(
+        "--linear-image-size",
+        type=int,
+        default=8,
+        help="Image size for Model E raw-pixel linear regression baseline.",
     )
     parser.add_argument(
         "--device",
@@ -280,6 +290,115 @@ def calculate_metrics(y_true, y_pred):
             for idx, class_name in enumerate(CLASS_NAMES)
         },
     }
+
+
+def selected_models(models_arg):
+    if models_arg == "both":
+        return ["a", "b"]
+    if models_arg == "all":
+        return ["a", "b", "c", "d", "e"]
+    return [models_arg]
+
+
+def one_hot(labels, num_classes):
+    encoded = np.zeros((len(labels), num_classes), dtype=np.float64)
+    encoded[np.arange(len(labels)), labels] = 1.0
+    return encoded
+
+
+def softmax_np(scores):
+    scores = scores - np.max(scores, axis=1, keepdims=True)
+    exp_scores = np.exp(scores)
+    return exp_scores / exp_scores.sum(axis=1, keepdims=True)
+
+
+def load_linear_split(split_dir, image_size):
+    features = []
+    labels = []
+    for label, class_name in enumerate(CLASS_NAMES):
+        class_dir = Path(split_dir) / class_name
+        for image_path in sorted(class_dir.iterdir()):
+            if not is_image_file(image_path):
+                continue
+            image = load_image_array(image_path, image_size=image_size)
+            features.append(image.flatten())
+            labels.append(label)
+    return np.stack(features), np.asarray(labels)
+
+
+def train_and_evaluate_linear_regression(data_dir, output_dir, image_size):
+    print(f"\n{'=' * 72}")
+    print("Training model_e_linear_regression")
+    print(f"{'=' * 72}")
+    print(
+        "Model E is a simple baseline: raw resized pixels -> LinearRegression "
+        "on one-hot labels -> argmax."
+    )
+
+    data_dir = Path(data_dir)
+    x_train, y_train = load_linear_split(data_dir / "train", image_size)
+    x_valid, y_valid = load_linear_split(data_dir / "valid", image_size)
+    x_test, y_test = load_linear_split(data_dir / "test", image_size)
+
+    model = LinearRegression()
+    model.fit(x_train, one_hot(y_train, len(CLASS_NAMES)))
+
+    valid_scores = model.predict(x_valid)
+    valid_pred = valid_scores.argmax(axis=1)
+    valid_probabilities = softmax_np(valid_scores)
+    valid_loss = log_loss(y_valid, valid_probabilities, labels=list(range(len(CLASS_NAMES))))
+    valid_accuracy = accuracy_score(y_valid, valid_pred)
+    valid_macro_f1 = calculate_macro_f1(y_valid, valid_pred)
+
+    test_scores = model.predict(x_test)
+    test_pred = test_scores.argmax(axis=1)
+    test_probabilities = softmax_np(test_scores)
+    test_loss = log_loss(y_test, test_probabilities, labels=list(range(len(CLASS_NAMES))))
+    metrics = calculate_metrics(y_test, test_pred)
+    metrics["test_loss"] = float(test_loss)
+    metrics["best_epoch"] = 1
+    metrics["epochs_run"] = 1
+    metrics["best_valid_accuracy"] = float(valid_accuracy)
+    metrics["best_valid_macro_f1"] = float(valid_macro_f1)
+    metrics["best_valid_loss"] = float(valid_loss)
+
+    matrix = confusion_matrix(y_test, test_pred, labels=list(range(len(CLASS_NAMES))))
+    plot_confusion_matrix(matrix, "model_e_linear_regression", output_dir)
+    joblib.dump(
+        {
+            "model": model,
+            "class_names": CLASS_NAMES,
+            "image_size": image_size,
+            "model_type": "raw_pixel_linear_regression",
+        },
+        output_dir / "model_e_linear_regression.joblib",
+    )
+    with (output_dir / "model_e_linear_regression_metrics.json").open("w") as file:
+        json.dump(
+            {
+                "metrics": metrics,
+                "confusion_matrix": matrix.tolist(),
+                "class_names": CLASS_NAMES,
+                "image_size": image_size,
+                "valid_accuracy": valid_accuracy,
+                "valid_macro_f1": valid_macro_f1,
+                "valid_loss": valid_loss,
+                "test_loss": test_loss,
+                "note": "Linear regression is not a natural multiclass image classifier; this is a deliberately simple baseline.",
+            },
+            file,
+            indent=2,
+        )
+
+    print("\nmodel_e_linear_regression test metrics:")
+    print(f"Validation accuracy: {valid_accuracy:.4f}")
+    print(f"Validation loss:     {valid_loss:.4f}")
+    print(f"Accuracy:            {metrics['accuracy']:.4f}")
+    print(f"Test loss:           {test_loss:.4f}")
+    print(f"F1-score:            {metrics['macro_f1_score']:.4f}")
+    print("Confusion matrix:")
+    print(matrix)
+    return metrics
 
 
 def calculate_macro_f1(y_true, y_pred):
@@ -631,8 +750,15 @@ def train_and_evaluate(
         std,
         use_tta=use_tta,
     )
+    test_loss, _, _ = evaluate(model, test_loader, criterion, device)
     matrix = confusion_matrix(y_true, y_pred, labels=list(range(len(CLASS_NAMES))))
     metrics = calculate_metrics(y_true, y_pred)
+    metrics["test_loss"] = float(test_loss)
+    metrics["best_epoch"] = int(best_epoch)
+    metrics["epochs_run"] = len(history["train_loss"])
+    metrics["best_valid_accuracy"] = float(best_valid_accuracy)
+    metrics["best_valid_macro_f1"] = float(best_valid_macro_f1)
+    metrics["best_valid_loss"] = float(best_valid_loss)
 
     plot_confusion_matrix(matrix, model_name, output_dir)
     save_sample_predictions(images, y_true, y_pred, probabilities, model_name, output_dir)
@@ -648,6 +774,7 @@ def train_and_evaluate(
                 "best_valid_accuracy": best_valid_accuracy,
                 "best_valid_macro_f1": best_valid_macro_f1,
                 "best_valid_loss": best_valid_loss,
+                "test_loss": test_loss,
                 "loss_name": loss_name,
                 "focal_gamma": focal_gamma if loss_name == "focal" else None,
                 "test_time_augmentation": use_tta,
@@ -662,6 +789,7 @@ def train_and_evaluate(
         f"and validation accuracy {best_valid_accuracy:.4f}"
     )
     print(f"Accuracy:  {metrics['accuracy']:.4f}")
+    print(f"Test loss: {test_loss:.4f}")
     print(f"Precision: {metrics['macro_precision']:.4f}")
     print(f"Recall:    {metrics['macro_recall']:.4f}")
     print(f"F1-score:  {metrics['macro_f1_score']:.4f}")
@@ -696,6 +824,24 @@ def write_run_summary(output_dir, args, split_counts, all_metrics, mean, std):
                 "activation": "SiLU hidden layers, raw logits output",
                 "optimizer": f"AdamW learning_rate={args.learning_rate} weight_decay={args.weight_decay}",
                 "loss": f"{args.loss} with label_smoothing=0.05 and optional inverse-frequency class weights",
+            },
+            "simple_cnn_c": {
+                "architecture": "Two Conv2d layers with MaxPool2d, Flatten, and one hidden Linear layer",
+                "activation": "ReLU hidden layers, raw logits output",
+                "optimizer": f"AdamW learning_rate={args.learning_rate} weight_decay={args.weight_decay}",
+                "loss": f"{args.loss} with label_smoothing=0.05 and optional inverse-frequency class weights",
+            },
+            "ann_mlp_d": {
+                "architecture": "Flattened image ANN with Linear, ReLU, BatchNorm1d, and Dropout layers",
+                "activation": "ReLU hidden layers, raw logits output",
+                "optimizer": f"AdamW learning_rate={args.learning_rate} weight_decay={args.weight_decay}",
+                "loss": f"{args.loss} with label_smoothing=0.05 and optional inverse-frequency class weights",
+            },
+            "model_e_linear_regression": {
+                "architecture": f"Raw {args.linear_image_size}x{args.linear_image_size} pixels fitted with scikit-learn LinearRegression on one-hot labels",
+                "activation": "None; predictions use argmax over regression scores",
+                "optimizer": "Closed-form least squares from scikit-learn",
+                "loss": "No training epochs; validation/test log loss is computed from softmax-normalized regression scores",
             },
         },
         "metrics": all_metrics,
@@ -743,10 +889,13 @@ def main():
     print(f"Train normalization mean: {mean.round(4).tolist()}")
     print(f"Train normalization std:  {std.round(4).tolist()}")
 
-    model_a = build_model_a(args.image_size, len(CLASS_NAMES))
-    model_b = build_model_b(args.image_size, len(CLASS_NAMES))
+    requested_models = selected_models(args.models)
+    if "c" in requested_models and args.image_size != 224:
+        raise ValueError("Model C has a fixed flatten size and requires --image-size 224.")
+
     training_jobs = {}
-    if args.models in ("a", "both"):
+    if "a" in requested_models:
+        model_a = build_model_a(args.image_size, len(CLASS_NAMES))
         training_jobs["custom_cnn_a"] = (
             model_a,
             torch.optim.AdamW(
@@ -755,11 +904,32 @@ def main():
                 weight_decay=args.weight_decay,
             ),
         )
-    if args.models in ("b", "both"):
+    if "b" in requested_models:
+        model_b = build_model_b(args.image_size, len(CLASS_NAMES))
         training_jobs["custom_cnn_b"] = (
             model_b,
             torch.optim.AdamW(
                 model_b.parameters(),
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay,
+            ),
+        )
+    if "c" in requested_models:
+        model_c = SimpleCNN()
+        training_jobs["simple_cnn_c"] = (
+            model_c,
+            torch.optim.AdamW(
+                model_c.parameters(),
+                lr=args.learning_rate,
+                weight_decay=args.weight_decay,
+            ),
+        )
+    if "d" in requested_models:
+        model_d = ANNClassifier(args.image_size, len(CLASS_NAMES))
+        training_jobs["ann_mlp_d"] = (
+            model_d,
+            torch.optim.AdamW(
+                model_d.parameters(),
                 lr=args.learning_rate,
                 weight_decay=args.weight_decay,
             ),
@@ -786,6 +956,13 @@ def main():
             args.tta,
         )
 
+    if "e" in requested_models:
+        all_metrics["model_e_linear_regression"] = train_and_evaluate_linear_regression(
+            args.data_dir,
+            output_dir,
+            args.linear_image_size,
+        )
+
     save_metrics_csv(all_metrics, output_dir)
     write_run_summary(output_dir, args, split_counts, all_metrics, mean, std)
 
@@ -796,7 +973,9 @@ def main():
             f"accuracy={metrics['accuracy']:.4f}, "
             f"precision={metrics['macro_precision']:.4f}, "
             f"recall={metrics['macro_recall']:.4f}, "
-            f"f1={metrics['macro_f1_score']:.4f}"
+            f"f1={metrics['macro_f1_score']:.4f}, "
+            f"test_loss={metrics.get('test_loss', float('nan')):.4f}, "
+            f"epochs_run={metrics.get('epochs_run', 'n/a')}"
         )
     print(f"\nAll artifacts saved in: {output_dir}")
 

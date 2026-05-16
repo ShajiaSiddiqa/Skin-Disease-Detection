@@ -17,8 +17,10 @@ This project is for coursework and experimentation only. It is not a medical dia
 ├── train_cnn_models.py      # Main PyTorch training/evaluation pipeline
 ├── model_a.py               # Improved VGG-style PyTorch CNN architecture
 ├── model_b.py               # Deeper plain PyTorch CNN architecture
+├── model_c.py               # Simple two-layer PyTorch CNN training script
+├── model_d.py               # Fully connected PyTorch ANN/MLP training and prediction script
+├── model_e.py               # scikit-learn linear regression training and prediction script
 ├── pipeline.py              # Legacy TXT-based dataset loader
-├── textcreation.py          # Generates train/valid/test TXT manifests
 ├── reports/
 │   └── skin_disease_detection_report.pdf
 ├── requirements.txt         # Python dependencies
@@ -88,7 +90,7 @@ python train_cnn_models.py \
   --output-dir results
 ```
 
-The script trains both CNN models, restores the best validation-accuracy checkpoint for each model, evaluates that checkpoint on the test split, and writes artifacts to a timestamped folder under `results/`.
+The script trains Model A and Model B, restores the best validation macro-F1 checkpoint for each model, evaluates that checkpoint on the test split, and writes artifacts to a timestamped folder under `results/`.
 
 The current training pipeline includes:
 
@@ -102,14 +104,26 @@ The current training pipeline includes:
 - Optional horizontal-flip test-time augmentation during final evaluation
 - Early stopping controlled by `--patience`
 
-Both models are custom CNNs trained from scratch. On a small dataset of only a few hundred training images, 80%+ test accuracy is not guaranteed. If accuracy remains limited, the most reliable allowed improvement is expanding and cleaning the dataset.
+All five models are trained from scratch or from raw pixel features. On a small dataset of only a few hundred training images, 80%+ test accuracy is not guaranteed. If accuracy remains limited, the most reliable allowed improvement is expanding and cleaning the dataset.
 
 You can train only one model during experiments:
 
 ```bash
 python train_cnn_models.py --models a
 python train_cnn_models.py --models b
+python train_cnn_models.py --models c --image-size 224
+python train_cnn_models.py --models d --image-size 128
+python train_cnn_models.py --models e --linear-image-size 8
 python train_cnn_models.py --models both
+python train_cnn_models.py --models all --image-size 224
+```
+
+The standalone scripts are also kept for direct experiments:
+
+```bash
+python model_c.py --data-dir final_dataset --epochs 30 --batch-size 16 --image-size 224
+python model_d.py train --data-dir final_dataset --img-size 128 --batch-size 32 --epochs 50 --patience 8
+python model_e.py train --data-dir final_dataset --image-size 8
 ```
 
 Class weights can be disabled for ablation runs:
@@ -240,20 +254,103 @@ Latest measured Model B metrics after removing dropout:
 | Final training loss | `0.5570` |
 | Final validation loss | `0.8758` |
 
+### Model C: Simple CNN
+
+Model C is the direct simple CNN implementation: two convolution layers, max pooling, one hidden fully connected layer, and a final 3-class output layer. It uses raw resized `224x224` images scaled to `[0, 1]`, no augmentation, no BatchNorm, no dropout, and no class weighting.
+
+```text
+Input: RGB image, 224x224
+Conv2d 3 -> 16, ReLU, MaxPool2d
+Conv2d 16 -> 32, ReLU, MaxPool2d
+Flatten
+Linear 32*54*54 -> 64, ReLU
+Linear 64 -> 3 classes
+```
+
+Latest measured Model C metrics:
+
+| Metric | Value |
+|---|---:|
+| Test accuracy | `56.36%` |
+| Test loss | `1.6501` |
+| Macro F1-score | `0.5399` |
+| Best validation accuracy | `56.36%` |
+| Best validation loss | `1.3903` |
+
+### Model D: ANN / MLP
+
+Model D is a fully connected artificial neural network. It flattens each `128x128` RGB image directly into a vector and classifies it with dense layers. It has many more parameters than the CNNs because the first linear layer receives every image pixel.
+
+```text
+Input: RGB image, 128x128
+Flatten
+Linear 49152 -> 1024, ReLU, BatchNorm1d, Dropout
+Linear 1024 -> 512, ReLU, BatchNorm1d, Dropout
+Linear 512 -> 128, ReLU, Dropout
+Linear 128 -> 3 classes
+```
+
+Latest measured Model D metrics:
+
+| Metric | Value |
+|---|---:|
+| Test accuracy | `49.09%` |
+| Test loss | `1.0320` |
+| Macro F1-score | `0.4399` |
+| Best validation accuracy | `52.73%` |
+| Best validation loss | `1.0031` |
+| Trainable parameters | `50,926,595` |
+
+### Model E: Simple Linear Regression
+
+Model E is a deliberately weak non-neural baseline. Linear regression is not a natural multiclass image-classification model. It is included only to show how a simple raw-pixel regression baseline compares against CNN and ANN models. Each image is resized to `8x8`, flattened, fitted with `LinearRegression` on one-hot class targets, and predicted with `argmax`.
+
+```text
+Input: RGB image, 8x8
+Scale pixels to [0, 1]
+Flatten raw pixels
+LinearRegression on one-hot class targets
+Argmax over 3 output scores
+```
+
+Latest measured Model E metrics:
+
+| Metric | Value |
+|---|---:|
+| Test accuracy | `45.45%` |
+| Test loss | `1.1966` |
+| Macro F1-score | `0.4306` |
+| Validation accuracy | `43.64%` |
+| Validation loss | `1.1261` |
+
+### Key Differences
+
+| Model | Implementation type | Main feature extractor | Regularization / preprocessing | Epochs run | Best epoch |
+|---|---|---|---|---:|---:|
+| Model A | PyTorch CNN | Four VGG-style conv blocks with global avg+max pooling | Augmentation, BatchNorm, Dropout, AdamW, class weights | `60` | `41` |
+| Model B | PyTorch CNN | Deeper plain conv stages with global avg+max pooling | Augmentation, BatchNorm, AdamW, class weights; dropout removed | `25` | `22` |
+| Model C | PyTorch CNN | Two basic conv layers and a large flatten layer | Raw pixel scaling only in standalone run | `30` | `9` |
+| Model D | PyTorch ANN | Dense layers over flattened pixels | BatchNorm and Dropout | `11` with early stopping | `3` |
+| Model E | scikit-learn baseline | Raw `8x8` pixels and LinearRegression | No deep learning; no true epochs | `1 fit` | `1` |
+
 ### Model Comparison
 
-| Model | Test Accuracy | Macro F1 | Best Validation Accuracy | Validation Loss |
-|---|---:|---:|---:|---:|
-| Model A | `69.09%` | `0.6831` | `72.73%` | `0.8066` |
-| Model B | `74.55%` | `0.7408` | `73.64%` | `0.7276` |
+| Rank | Model | Test Accuracy | Macro F1 | Best/Final Validation Accuracy | Validation Loss | Test Loss |
+|---:|---|---:|---:|---:|---:|---:|
+| 1 | Model B | `74.55%` | `0.7408` | `73.64%` | `0.7276` | Not saved |
+| 2 | Model A | `69.09%` | `0.6831` | `72.73%` | `0.8066` | Not saved |
+| 3 | Model C | `56.36%` | `0.5399` | `56.36%` | `1.3903` | `1.6501` |
+| 4 | Model D | `49.09%` | `0.4399` | `52.73%` | `1.0031` | `1.0320` |
+| 5 | Model E | `45.45%` | `0.4306` | `43.64%` | `1.1261` | `1.1966` |
 
-Model B is currently the better measured model for this dataset, though the small 55-image test split means one changed prediction moves test accuracy by about 1.82 percentage points.
+Model B is currently the best measured implementation because it has the highest test accuracy, highest macro F1, and lowest validation loss. Model A is second. Model C is third by accuracy, but its high validation/test loss shows overfitting. Model D has lower loss than Model C but weaker accuracy and F1. Model E is last because linear regression is only a simple raw-pixel baseline, not an appropriate primary multiclass image classifier.
 
 ## Outputs
 
-Each training run creates files such as:
+Each unified training run creates files such as:
 
-- Saved PyTorch checkpoints: `custom_cnn_a.pt`, `custom_cnn_b.pt`
+- Saved PyTorch checkpoints for Models A-D
+- Saved `joblib` artifact for Model E
 - Accuracy and loss plots
 - Confusion matrices
 - Correct and incorrect prediction sample grids
@@ -261,7 +358,7 @@ Each training run creates files such as:
 - `model_comparison_metrics.csv`
 - `run_summary.json`
 
-Each checkpoint also stores the best epoch, best validation accuracy, class names, training history, and normalization values needed for inference.
+PyTorch checkpoints store the best epoch, best validation accuracy, class names, training history, and normalization values needed for inference. The Model E `joblib` file stores the fitted linear regression model, class names, and image size.
 
 ## Project Report
 
@@ -291,36 +388,3 @@ Check and adjust folder names inside these helper scripts before running them on
 - Raw datasets, processed datasets, trained models, and result images are ignored by Git.
 - Keep reproducible source code and dependency files in Git.
 - Store large datasets or model artifacts separately if they need to be shared.
-
-## Push to GitHub from VS Code
-
-1. Open this project folder in VS Code.
-2. Open the Source Control panel from the left sidebar.
-3. If Git is not initialized, click `Initialize Repository`.
-4. Create a new empty repository on GitHub. Do not add a README there because this project already has one.
-5. In VS Code terminal, connect the local repo to GitHub:
-
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY_NAME.git
-git branch -M main
-```
-
-6. Stage the files from the Source Control panel, or run:
-
-```bash
-git add .
-```
-
-7. Commit:
-
-```bash
-git commit -m "Initial skin disease detection project"
-```
-
-8. Push:
-
-```bash
-git push -u origin main
-```
-
-After this, future updates can be pushed from VS Code using Source Control: stage changes, write a commit message, click Commit, then Sync/Push.
